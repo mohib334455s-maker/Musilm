@@ -1,5 +1,4 @@
-import { db } from "@/db";
-import { settings } from "@/db/schema";
+import { isDemoMode } from "@/lib/demo";
 
 export const DEFAULT_SETTINGS: Record<string, string> = {
   siteName: "Muslim Store",
@@ -24,10 +23,12 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
 };
 
 export async function getSettings(): Promise<Record<string, string>> {
-  if (process.env.NEXT_PHASE === "phase-production-build" || !process.env.DATABASE_URL) {
+  if (isDemoMode() || process.env.NEXT_PHASE === "phase-production-build") {
     return { ...DEFAULT_SETTINGS };
   }
   try {
+    const { db } = await import("@/db");
+    const { settings } = await import("@/db/schema");
     const rows = await db.select().from(settings);
     const merged: Record<string, string> = { ...DEFAULT_SETTINGS };
     for (const row of rows) merged[row.key] = row.value;
@@ -38,8 +39,10 @@ export async function getSettings(): Promise<Record<string, string>> {
 }
 
 export async function setSettings(values: Record<string, string>): Promise<void> {
-  const entries = Object.entries(values);
-  for (const [key, value] of entries) {
+  if (isDemoMode()) throw new Error("demo mode");
+  const { db } = await import("@/db");
+  const { settings } = await import("@/db/schema");
+  for (const [key, value] of Object.entries(values)) {
     await db
       .insert(settings)
       .values({ key, value: String(value ?? "") })

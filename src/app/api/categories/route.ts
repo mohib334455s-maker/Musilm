@@ -1,7 +1,6 @@
-import { asc, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { categories, products } from "@/db/schema";
+import { isDemoMode } from "@/lib/demo";
+import { listCategories } from "@/lib/store-data";
 import { requireAdmin } from "@/lib/auth";
 import { slugify } from "@/lib/format";
 
@@ -10,13 +9,22 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const sp = new URL(req.url).searchParams;
   const admin = sp.get("all") === "1";
-  if (admin) {
+  if (admin && !isDemoMode()) {
     try {
       await requireAdmin();
     } catch {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
   }
+
+  if (isDemoMode() || !admin) {
+    const items = await listCategories();
+    return NextResponse.json({ items, demo: isDemoMode() });
+  }
+
+  const { db } = await import("@/db");
+  const { categories, products } = await import("@/db/schema");
+  const { asc, eq, sql } = await import("drizzle-orm");
   const rows = await db
     .select({
       id: categories.id,
@@ -29,18 +37,22 @@ export async function GET(req: Request) {
     })
     .from(categories)
     .leftJoin(products, sql`${products.categoryId} = ${categories.id} and ${products.isActive} = true`)
-    .where(admin ? undefined : eq(categories.isActive, true))
     .groupBy(categories.id)
     .orderBy(asc(categories.sortOrder), asc(categories.id));
   return NextResponse.json({ items: rows });
 }
 
 export async function POST(req: Request) {
+  if (isDemoMode()) {
+    return NextResponse.json({ error: "در حالت نمایشی امکان افزودن دسته نیست" }, { status: 503 });
+  }
   try {
     await requireAdmin();
   } catch {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+  const { db } = await import("@/db");
+  const { categories } = await import("@/db/schema");
   const body = await req.json();
   const name = String(body.name ?? "").trim();
   if (!name) return NextResponse.json({ error: "نام دسته لازم است" }, { status: 400 });
@@ -48,11 +60,11 @@ export async function POST(req: Request) {
     .insert(categories)
     .values({
       name,
-      slug: body.slug ? slugify(String(body.slug)) : slugify(name),
+      slug: String(body.slug ?? "").trim() || `${slugify(name)}-${Date.now().toString(36).slice(-4)}`,
       image: body.image ? String(body.image) : null,
       sortOrder: Number(body.sortOrder) || 0,
       isActive: body.isActive === undefined ? true : Boolean(body.isActive),
     })
     .returning();
-  return NextResponse.json({ ok: true, category: created[0] });
+  return NextResponse.json({ ok: true, item: created[0] });
 }

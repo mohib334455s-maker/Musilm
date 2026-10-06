@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { messages } from "@/db/schema";
+import { isDemoMode } from "@/lib/demo";
 import { cleanPhone, cleanText, guard } from "@/lib/security";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +15,14 @@ export async function POST(req: Request) {
   if (!name || !phone || !text) {
     return NextResponse.json({ error: "نام، شماره تماس و پیام لازم است" }, { status: 400 });
   }
+
+  if (isDemoMode()) {
+    // Display-only deploy: accept the form without persistence
+    return NextResponse.json({ ok: true, demo: true });
+  }
+
+  const { db } = await import("@/db");
+  const { messages } = await import("@/db/schema");
   await db.insert(messages).values({ name, phone, body: text });
   return NextResponse.json({ ok: true });
 }

@@ -1,7 +1,5 @@
-import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { customers } from "@/db/schema";
+import { isDemoMode } from "@/lib/demo";
 import {
   SESSION_COOKIE,
   SESSION_TTL_MS,
@@ -16,10 +14,14 @@ import { cleanEmail, cleanPhone, cleanText, guard, passwordIssue, rateLimit, cli
 export const dynamic = "force-dynamic";
 
 const GENERIC = "ایمیل یا رمز عبور درست نیست";
+const DEMO_MSG = "این نسخه نمایشی است و ورود/ثبت‌نام بدون دیتابیس فعال نیست";
 
 export async function GET() {
   const user = await getSessionUser();
-  return NextResponse.json({ user: user ? { id: user.id, name: user.name, email: user.email, role: user.role } : null });
+  return NextResponse.json({
+    user: user ? { id: user.id, name: user.name, email: user.email, role: user.role } : null,
+    demo: isDemoMode(),
+  });
 }
 
 export async function POST(req: Request) {
@@ -35,11 +37,18 @@ export async function POST(req: Request) {
     return res;
   }
 
+  if (isDemoMode() && (action === "login" || action === "register")) {
+    return NextResponse.json({ error: DEMO_MSG, demo: true }, { status: 503 });
+  }
+
+  const { db } = await import("@/db");
+  const { customers } = await import("@/db/schema");
+  const { eq } = await import("drizzle-orm");
+
   const email = cleanEmail(body.email);
   const password = typeof body.password === "string" ? body.password.slice(0, 128) : "";
 
   if (action === "register") {
-    // stricter limit for account creation
     const signupBlock = guard(req, { route: "auth:register", limit: 5, windowMs: 10 * 60_000 });
     if (signupBlock) return signupBlock;
 
@@ -73,7 +82,6 @@ export async function POST(req: Request) {
   }
 
   if (action === "login") {
-    // brute-force protection: per IP and per account
     const ipBlock = guard(req, { route: "auth:login:ip", limit: 10, windowMs: 10 * 60_000 });
     if (ipBlock) return ipBlock;
     if (email) {

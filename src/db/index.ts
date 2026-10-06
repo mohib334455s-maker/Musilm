@@ -1,20 +1,21 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
+import { isDemoMode } from "@/lib/demo";
 
 /**
- * During `next build` (e.g. on Vercel) DATABASE_URL may be unset while
- * Next still imports this module for layout / not-found. Defer the real
- * requirement to first query at runtime.
+ * In demo / no-DATABASE_URL mode we never open a real Pool.
+ * Pages and APIs must go through `@/lib/store-data` helpers instead of querying `db`.
  */
+const demo = isDemoMode();
 const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
 
 const databaseUrl =
   process.env.DATABASE_URL ||
-  (isBuildPhase ? "postgresql://build:build@127.0.0.1:5432/build" : "");
+  (isBuildPhase || demo ? "postgresql://demo:demo@127.0.0.1:5432/demo" : "");
 
 if (!databaseUrl) {
   throw new Error(
-    "DATABASE_URL is required. Set it in .env locally or in Vercel → Project Settings → Environment Variables.",
+    "DATABASE_URL is required. Set it in .env or enable demo mode by leaving it unset.",
   );
 }
 
@@ -22,17 +23,32 @@ const globalForDb = globalThis as typeof globalThis & {
   __arenaNextJsPostgresqlPool?: Pool;
 };
 
-export const pool =
-  globalForDb.__arenaNextJsPostgresqlPool ??
-  new Pool({
+function createPool(): Pool {
+  return new Pool({
     connectionString: databaseUrl,
-    max: 10,
-    // Fail fast during build if anything accidentally queries
-    connectionTimeoutMillis: isBuildPhase ? 1 : 10_000,
+    max: demo ? 1 : 10,
+    connectionTimeoutMillis: demo || isBuildPhase ? 1 : 10_000,
+    idleTimeoutMillis: 5_000,
   });
+}
 
-if (process.env.NODE_ENV !== "production") {
+export const pool =
+  demo
+    ? (null as unknown as Pool)
+    : (globalForDb.__arenaNextJsPostgresqlPool ?? createPool());
+
+if (!demo && process.env.NODE_ENV !== "production") {
   globalForDb.__arenaNextJsPostgresqlPool = pool;
 }
 
-export const db = drizzle(pool);
+/** Only safe to use when `!isDemoMode()`. Prefer `@/lib/store-data`. */
+export const db = demo
+  ? (new Proxy(
+      {},
+      {
+        get() {
+          throw new Error("Database disabled in demo mode — use @/lib/store-data");
+        },
+      },
+    ) as ReturnType<typeof drizzle>)
+  : drizzle(pool);

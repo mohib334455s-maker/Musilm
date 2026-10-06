@@ -1,8 +1,5 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
-import { db } from "@/db";
-import { customers } from "@/db/schema";
-import { eq } from "drizzle-orm";
 
 const SECRET = process.env.AUTH_SECRET || "muslim-store-secret-key-change-me";
 export const SESSION_COOKIE = "ms_session";
@@ -80,7 +77,7 @@ export type SessionUser = {
 };
 
 export async function getSessionUser(): Promise<SessionUser | null> {
-  // Skip DB while Next collects page data on Vercel build (DATABASE_URL may be unset)
+  // Skip DB in demo mode / during production build
   if (process.env.NEXT_PHASE === "phase-production-build" || !process.env.DATABASE_URL) {
     return null;
   }
@@ -88,6 +85,11 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   const store = await cookies();
   const session = readSessionToken(store.get(SESSION_COOKIE)?.value);
   if (!session) return null;
+
+  const { db } = await import("@/db");
+  const { customers } = await import("@/db/schema");
+  const { eq } = await import("drizzle-orm");
+
   const rows = await db
     .select({
       id: customers.id,

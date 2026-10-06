@@ -1,7 +1,5 @@
-import { asc, eq } from "drizzle-orm";
-import { db } from "@/db";
-import { zones } from "@/db/schema";
 import { getSettings } from "@/lib/settings";
+import { listZones } from "@/lib/store-data";
 import { ContactForm } from "@/components/contact-form";
 import { Reveal } from "@/components/ui";
 import { PhoneIcon, PinIcon, TruckIcon } from "@/components/icons";
@@ -13,7 +11,7 @@ export const metadata = { title: "تماس با ما | Muslim Store" };
 
 export default async function ContactPage() {
   const s = await getSettings();
-  const zoneRows = await db.select().from(zones).where(eq(zones.isActive, true)).orderBy(asc(zones.id));
+  const zoneRows = await listZones();
 
   return (
     <div className="mx-auto max-w-[1280px] px-4 py-10 md:px-6 md:py-14">
@@ -29,7 +27,13 @@ export default async function ContactPage() {
           {[
             { Icon: PhoneIcon, label: "تلفن / واتساپ", value: s.phone, dir: "ltr" as const, extra: s.workingHours },
             { Icon: PinIcon, label: "آدرس انبار", value: s.address, extra: s.pickupAddress },
-            { Icon: TruckIcon, label: "ایمیل", value: s.email, dir: "ltr" as const, extra: `ارسال رایگان بالای ${num(Number(s.freeDeliveryThreshold))} افغانی` },
+            {
+              Icon: TruckIcon,
+              label: "ایمیل",
+              value: s.email,
+              dir: "ltr" as const,
+              extra: `ارسال رایگان بالای ${num(Number(s.freeDeliveryThreshold))} افغانی`,
+            },
           ].map(({ Icon, label, value, extra, dir }) => (
             <Reveal key={label}>
               <div className="flex items-start gap-4 rounded-lg border border-line p-5 transition hover:border-brand/40">
@@ -49,48 +53,37 @@ export default async function ContactPage() {
 
           <Reveal delay={80}>
             <div className="overflow-hidden rounded-lg border border-line">
-              <iframe
-                title="نقشه مزارشریف"
-                className="h-[240px] w-full border-0"
-                loading="lazy"
-                src="https://www.openstreetmap.org/export/embed.html?bbox=67.05%2C36.66%2C67.18%2C36.76&layer=mapnik&marker=36.7069%2C67.1147"
-              />
+              <table className="w-full text-right text-[12.5px]">
+                <thead className="bg-brand-soft text-[11px] text-muted">
+                  <tr>
+                    <th className="px-3 py-2.5 font-medium">منطقه</th>
+                    <th className="px-3 py-2.5 font-medium">کرایه</th>
+                    <th className="px-3 py-2.5 font-medium">زمان</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {zoneRows.map((z) => (
+                    <tr key={z.id}>
+                      <td className="px-3 py-2.5 text-ink">{z.name}</td>
+                      <td className="num px-3 py-2.5 text-muted">{z.fee === 0 ? "رایگان" : `${num(z.fee)} ؋`}</td>
+                      <td className="num px-3 py-2.5 text-muted">{z.eta}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </Reveal>
         </div>
 
-        <Reveal delay={40}>
-          <ContactForm />
-        </Reveal>
-      </div>
-
-      <div className="mt-12">
-        <h2 className="border-b border-line pb-4 text-[20px] font-bold text-ink">مناطق تحت پوشش</h2>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {zoneRows.map((z) => (
-            <div key={z.id} className="rounded-lg border border-line p-4">
-              <p className="text-[14px] font-semibold text-ink">{z.name}</p>
-              <dl className="num mt-2.5 space-y-1 text-[12.5px] text-muted">
-                <div className="flex justify-between">
-                  <dt>کرایه</dt>
-                  <dd>{z.fee === 0 ? "رایگان" : `${num(z.fee)} ؋`}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt>حداقل سفارش</dt>
-                  <dd>{num(z.minOrder)} ؋</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt>ارسال رایگان از</dt>
-                  <dd className="text-brand">{num(z.freeOver)} ؋</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt>زمان تحویل</dt>
-                  <dd>{z.eta}</dd>
-                </div>
-              </dl>
+        <Reveal delay={60}>
+          <div className="rounded-lg border border-line p-5 md:p-6">
+            <h2 className="text-[18px] font-bold text-ink">ارسال پیام</h2>
+            <p className="mt-1.5 text-[13px] text-muted">پیام شما در پنل مدیریت ثبت می‌شود.</p>
+            <div className="mt-5">
+              <ContactForm />
             </div>
-          ))}
-        </div>
+          </div>
+        </Reveal>
       </div>
     </div>
   );

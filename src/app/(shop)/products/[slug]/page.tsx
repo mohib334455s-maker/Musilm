@@ -1,12 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, desc, eq, sql } from "drizzle-orm";
-import { db } from "@/db";
-import { categories, products, reviews } from "@/db/schema";
 import { getSettings } from "@/lib/settings";
-import { CARD_COLUMNS, SLIM_COLUMNS } from "@/lib/queries";
-import { num, toFa } from "@/lib/format";
-import { timeAgo } from "@/lib/format";
+import { getProductBySlug, listProductReviews, listProducts } from "@/lib/store-data";
+import { num, toFa, timeAgo } from "@/lib/format";
 import { BuyBox } from "@/components/buy-box";
 import { Gallery } from "@/components/gallery";
 import { ProductCard } from "@/components/product-card";
@@ -19,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ slug: string }> };
 
-function parseGallery(raw: string | null, fallback: string | null): string[] {
+function parseGallery(raw: string | null | undefined, fallback: string | null | undefined): string[] {
   if (raw) {
     try {
       const parsed = JSON.parse(raw);
@@ -37,40 +33,16 @@ function parseGallery(raw: string | null, fallback: string | null): string[] {
 export default async function ProductPage({ params }: Ctx) {
   const { slug } = await params;
   const s = await getSettings();
-
-  const [product] = await db
-    .select({
-      ...CARD_COLUMNS,
-      categoryId: products.categoryId,
-      categorySlug: categories.slug,
-      categoryName: categories.name,
-    })
-    .from(products)
-    .leftJoin(categories, eq(products.categoryId, categories.id))
-    .where(eq(products.slug, slug))
-    .limit(1);
-
+  const product = await getProductBySlug(slug);
   if (!product || !product.isActive) notFound();
 
-  const related = product.categoryId
-    ? await db
-        .select(SLIM_COLUMNS)
-        .from(products)
-        .where(
-          sql`${products.categoryId} = ${product.categoryId} and ${products.slug} <> ${slug} and ${products.isActive} = true`,
-        )
-        .limit(12)
+  const related = product.categorySlug
+    ? (await listProducts({ cat: product.categorySlug, limit: 13 })).filter((p) => p.slug !== slug).slice(0, 12)
     : [];
 
-  const reviewRows = await db
-    .select()
-    .from(reviews)
-    .where(and(eq(reviews.productId, product.id), eq(reviews.isApproved, true)))
-    .orderBy(desc(reviews.createdAt))
-    .limit(30);
-
+  const reviewRows = await listProductReviews(product.id);
   const reviewCount = reviewRows.length;
-  const reviewAvg = reviewCount ? reviewRows.reduce((a, r) => a + r.rating, 0) / reviewCount : 0;
+  const reviewAvg = reviewCount ? reviewRows.reduce((a, r) => a + r.rating, 0) / reviewCount : Number(product.rating ?? 0);
   const dist = [5, 4, 3, 2, 1].map((star) => reviewRows.filter((r) => r.rating === star).length);
 
   const out = product.stock <= 0;
@@ -82,24 +54,16 @@ export default async function ProductPage({ params }: Ctx) {
     "@context": "https://schema.org",
     "@type": "Product",
     name: product.name,
-    image: gallery.map((g) => g),
+    image: gallery,
     description: product.description ?? product.name,
     sku: product.sku ?? undefined,
-    gtin: product.barcode ?? undefined,
     brand: product.brand ? { "@type": "Brand", name: product.brand } : undefined,
-    category: product.categoryName ?? undefined,
     offers: {
       "@type": "Offer",
-      price: product.wholesalePrice ?? price,
+      price,
       priceCurrency: "AFN",
       availability: out ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
-      eligibleQuantity: product.wholesalePrice
-        ? { "@type": "QuantitativeValue", minValue: product.wholesaleMin, unitCode: "C62" }
-        : undefined,
     },
-    aggregateRating: reviewCount
-      ? { "@type": "AggregateRating", ratingValue: Number(reviewAvg.toFixed(2)), reviewCount }
-      : undefined,
   };
 
   return (
@@ -125,13 +89,9 @@ export default async function ProductPage({ params }: Ctx) {
       <div className="mt-5 grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)_360px] lg:gap-6">
         <Gallery images={gallery} name={product.name} discount={product.discount} out={out} sold={sold} />
 
-        {/* info */}
         <div>
           {product.brand ? (
-            <Link
-              href={`/products?q=${encodeURIComponent(product.brand)}`}
-              className="text-[12px] text-muted transition hover:text-brand"
-            >
+            <Link href={`/products?q=${encodeURIComponent(product.brand)}`} className="text-[12px] text-muted transition hover:text-brand">
               برند: {product.brand}
             </Link>
           ) : null}
@@ -156,12 +116,10 @@ export default async function ProductPage({ params }: Ctx) {
             )}
             <span className="text-line">|</span>
             <span>{product.sizeLabel ?? product.unit}</span>
-            <span className="text-line">|</span>
-            <span dir="ltr">SKU: {product.sku}</span>
-            {product.barcode ? (
+            {product.sku ? (
               <>
                 <span className="text-line">|</span>
-                <span dir="ltr">بارکد: {product.barcode}</span>
+                <span dir="ltr">SKU: {product.sku}</span>
               </>
             ) : null}
           </div>
@@ -170,7 +128,6 @@ export default async function ProductPage({ params }: Ctx) {
             <p className="mt-5 max-w-prose text-[14px] leading-8 text-ink/85">{product.description}</p>
           ) : null}
 
-          {/* price ladder */}
           <div className="mt-6 overflow-hidden rounded-xl border border-line">
             <p className="border-b border-line bg-brand-soft px-4 py-2.5 text-[12.5px] font-semibold text-ink">
               پلکان قیمت (عمده و پرچون)
@@ -191,27 +148,16 @@ export default async function ProductPage({ params }: Ctx) {
                     <td className="num px-4 py-3 text-left font-bold text-brand">{num(product.wholesalePrice)} ؋</td>
                   </tr>
                 ) : null}
-                <tr>
-                  <td className="px-4 py-3 text-muted">صرفه‌جویی در خرید عمده</td>
-                  <td className="num px-4 py-3 text-left font-medium text-accent">
-                    {product.wholesalePrice != null
-                      ? `${num((price - product.wholesalePrice) * product.wholesaleMin)} ؋ در ${toFa(product.wholesaleMin)} عدد`
-                      : "—"}
-                  </td>
-                </tr>
               </tbody>
             </table>
           </div>
 
-          {/* specs */}
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
             {[
               ["دسته‌بندی", product.categoryName ?? "—"],
               ["واحد فروش", product.unit],
               ["وزن / حجم", product.sizeLabel ?? "—"],
               ["موجودی انبار", out ? "ناموجود" : `${toFa(product.stock)} ${product.unit}`],
-              ["حد هشدار موجودی", toFa(product.lowStockAt)],
-              ["قیمت عمده از", `${toFa(product.wholesaleMin)} عدد`],
             ].map(([k, v]) => (
               <div key={k} className="flex items-center justify-between gap-3 rounded-lg border border-line px-3.5 py-2.5">
                 <span className="text-[12px] text-muted">{k}</span>
@@ -220,7 +166,6 @@ export default async function ProductPage({ params }: Ctx) {
             ))}
           </div>
 
-          {/* delivery */}
           <div className="mt-6 space-y-2.5 rounded-xl border border-line p-4">
             {[
               { Icon: TruckIcon, text: `تحویل در ${s.city} بین ۲ تا ۸ ساعت برای نواحی مرکزی` },
@@ -235,7 +180,6 @@ export default async function ProductPage({ params }: Ctx) {
           </div>
         </div>
 
-        {/* buy box */}
         <div className="lg:sticky lg:top-32 lg:h-fit">
           <BuyBox product={product} freeDeliveryThreshold={Number(s.freeDeliveryThreshold) || 0} />
           <div className="mt-3 rounded-xl border border-line p-4">
@@ -254,7 +198,6 @@ export default async function ProductPage({ params }: Ctx) {
         </div>
       </div>
 
-      {/* reviews */}
       <section id="reviews" className="mt-14 scroll-mt-36">
         <div className="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-line pb-4">
           <div>
@@ -263,12 +206,6 @@ export default async function ProductPage({ params }: Ctx) {
               {reviewCount > 0 ? `${toFa(reviewCount)} نقد ثبت شده برای این محصول` : "هنوز نقدی ثبت نشده است"}
             </p>
           </div>
-          {reviewCount > 0 ? (
-            <div className="flex items-center gap-3">
-              <span className="num text-[30px] font-bold leading-none text-brand">{toFa(reviewAvg.toFixed(1))}</span>
-              <Stars value={reviewAvg} size={16} />
-            </div>
-          ) : null}
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
@@ -282,7 +219,7 @@ export default async function ProductPage({ params }: Ctx) {
                     <div key={star} className="flex items-center gap-3 text-[11.5px]">
                       <span className="num w-12 shrink-0 text-muted">{toFa(star)} ستاره</span>
                       <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#EDEFEA]">
-                        <span className="block h-full rounded-full bg-accent transition-all duration-700" style={{ width: `${pct}%` }} />
+                        <span className="block h-full rounded-full bg-accent" style={{ width: `${pct}%` }} />
                       </span>
                       <span className="num w-6 shrink-0 text-left text-muted">{toFa(c)}</span>
                     </div>
@@ -294,11 +231,6 @@ export default async function ProductPage({ params }: Ctx) {
           </div>
 
           <div className="space-y-3">
-            {reviewRows.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-line px-4 py-10 text-center text-[13px] text-muted">
-                هنوز نقدی برای این محصول نوشته نشده — اولین نفر باشید.
-              </p>
-            ) : null}
             {reviewRows.map((r) => (
               <article key={r.id} className="rounded-xl border border-line bg-white p-4">
                 <div className="flex flex-wrap items-center gap-3">
@@ -307,10 +239,7 @@ export default async function ProductPage({ params }: Ctx) {
                   </span>
                   <span className="min-w-0">
                     <span className="block truncate text-[13px] font-semibold text-ink">{r.name}</span>
-                    <span className="num mt-0.5 block text-[11px] text-muted">
-                      {timeAgo(r.createdAt)}
-                      {r.customerId ? " · خرید تأییدشده" : ""}
-                    </span>
+                    <span className="num mt-0.5 block text-[11px] text-muted">{timeAgo(r.createdAt)}</span>
                   </span>
                   <span className="mr-auto">
                     <Stars value={r.rating} size={13} />
@@ -347,28 +276,15 @@ export default async function ProductPage({ params }: Ctx) {
 
 export async function generateMetadata({ params }: Ctx) {
   const { slug } = await params;
-  const [row] = await db
-    .select({
-      name: products.name,
-      description: products.description,
-      image: products.image,
-      brand: products.brand,
-      price: products.price,
-    })
-    .from(products)
-    .where(eq(products.slug, slug))
-    .limit(1);
+  const row = await getProductBySlug(slug);
   const title = row ? `${row.name} | Muslim Store` : "محصول | Muslim Store";
   return {
     title,
-    description:
-      row?.description ??
-      `خرید ${row?.name ?? "محصول"}${row?.brand ? ` از برند ${row.brand}` : ""} با قیمت پرچون و عمده از مسلم استور مزارشریف`,
+    description: row?.description ?? `خرید ${row?.name ?? "محصول"} از مسلم استور مزارشریف`,
     openGraph: {
       title,
-      description: row?.description ?? `خرید ${row?.name ?? "محصول"} از مسلم استور`,
+      description: row?.description ?? undefined,
       images: row?.image ? [{ url: row.image }] : undefined,
-      type: "website",
     },
   };
 }

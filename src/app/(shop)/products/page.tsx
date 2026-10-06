@@ -1,8 +1,5 @@
 import Link from "next/link";
-import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
-import { db } from "@/db";
-import { categories, products } from "@/db/schema";
-import { SLIM_COLUMNS } from "@/lib/queries";
+import { listCategories, listProducts } from "@/lib/store-data";
 import { ProductsView } from "@/components/products-view";
 import { SearchIcon } from "@/components/icons";
 import { toFa } from "@/lib/format";
@@ -24,42 +21,10 @@ export default async function ProductsPage({ searchParams }: { searchParams: Par
   const cat = (sp.cat ?? "").trim();
   const sort = sp.sort ?? "popular";
 
-  const cats = await db
-    .select({ id: categories.id, slug: categories.slug, name: categories.name })
-    .from(categories)
-    .where(eq(categories.isActive, true))
-    .orderBy(asc(categories.sortOrder));
-
-  const conds = [eq(products.isActive, true)];
-  if (cat) conds.push(eq(categories.slug, cat));
-  if (q) {
-    conds.push(
-      or(
-        ilike(products.name, `%${q}%`),
-        ilike(products.brand, `%${q}%`),
-        ilike(products.sku, `%${q}%`),
-        ilike(products.barcode, `%${q}%`),
-        ilike(categories.name, `%${q}%`),
-      )!,
-    );
-  }
-
-  const order =
-    sort === "cheap"
-      ? [asc(products.price)]
-      : sort === "expensive"
-        ? [desc(products.price)]
-        : sort === "new"
-          ? [desc(products.createdAt)]
-          : [desc(products.isPopular), desc(products.id)];
-
-  const items = await db
-    .select(SLIM_COLUMNS)
-    .from(products)
-    .leftJoin(categories, eq(products.categoryId, categories.id))
-    .where(and(...conds))
-    .orderBy(...order)
-    .limit(120);
+  const [cats, items] = await Promise.all([
+    listCategories(),
+    listProducts({ q: q || undefined, cat: cat || undefined, sort, limit: 120 }),
+  ]);
 
   const activeCat = cats.find((c) => c.slug === cat);
 
@@ -82,24 +47,24 @@ export default async function ProductsPage({ searchParams }: { searchParams: Par
           </h1>
           <p className="num mt-1.5 text-[13px] text-muted">{toFa(items.length)} محصول</p>
         </div>
-        <form action="/products" method="get" className="relative w-full max-w-xs">
-          {cat ? <input type="hidden" name="cat" value={cat} /> : null}
-          <SearchIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" width={17} height={17} />
+        <form action="/products" className="flex h-11 w-full max-w-sm overflow-hidden rounded-lg border border-line bg-white sm:w-auto">
           <input
             name="q"
             defaultValue={q}
-            placeholder="جستجو: نام، برند، SKU یا بارکد"
-            className="h-11 w-full rounded-md border border-line bg-brand-soft pr-10 pl-3 text-sm outline-none transition focus:border-brand focus:bg-white"
+            placeholder="جستجو…"
+            className="min-w-0 flex-1 px-3 text-[13px] outline-none"
           />
+          {cat ? <input type="hidden" name="cat" value={cat} /> : null}
+          <button type="submit" className="grid w-11 place-items-center bg-brand text-white">
+            <SearchIcon width={18} height={18} />
+          </button>
         </form>
       </div>
 
       <div className="no-bar mt-5 flex gap-2 overflow-x-auto pb-1">
         <Link
           href={buildHref({ cat: "" })}
-          className={`shrink-0 rounded-full border px-4 py-2 text-[13px] transition ${
-            !cat ? "border-brand bg-brand text-white" : "border-line text-ink hover:border-brand hover:text-brand"
-          }`}
+          className={`shrink-0 rounded-full border px-3.5 py-1.5 text-[12.5px] ${!cat ? "border-brand bg-brand text-white" : "border-line bg-white text-ink"}`}
         >
           همه
         </Link>
@@ -107,36 +72,28 @@ export default async function ProductsPage({ searchParams }: { searchParams: Par
           <Link
             key={c.id}
             href={buildHref({ cat: c.slug })}
-            className={`shrink-0 rounded-full border px-4 py-2 text-[13px] transition ${
-              cat === c.slug ? "border-brand bg-brand text-white" : "border-line text-ink hover:border-brand hover:text-brand"
-            }`}
+            className={`shrink-0 rounded-full border px-3.5 py-1.5 text-[12.5px] ${cat === c.slug ? "border-brand bg-brand text-white" : "border-line bg-white text-ink"}`}
           >
             {c.name}
           </Link>
         ))}
       </div>
 
-      {q ? (
-        <div className="mt-5 flex items-center justify-between gap-3">
-          <p className="text-[12.5px] text-muted">نتایج برای عبارت «{q}» در نام، برند، SKU و بارکد جستجو شد.</p>
-          <Link href={buildHref({ q: "" })} className="shrink-0 text-[12.5px] text-muted transition hover:text-danger">
-            پاک کردن جستجو
+      <div className="mt-4 flex flex-wrap gap-2">
+        {SORTS.map((s) => (
+          <Link
+            key={s.value}
+            href={buildHref({ sort: s.value })}
+            className={`rounded-md border px-3 py-1.5 text-[12px] ${sort === s.value ? "border-brand text-brand" : "border-line text-muted"}`}
+          >
+            {s.label}
           </Link>
-        </div>
-      ) : null}
+        ))}
+      </div>
 
-      <ProductsView items={items} sort={sort} q={q} cat={cat} />
+      <div className="mt-8">
+        <ProductsView items={items} sort={sort} q={q} cat={cat} />
+      </div>
     </div>
   );
 }
-
-export async function generateMetadata({ searchParams }: { searchParams: Params }) {
-  const sp = await searchParams;
-  const suffix = sp.cat ? ` — ${sp.cat}` : sp.q ? ` — ${sp.q}` : "";
-  return {
-    title: `محصولات${suffix} | Muslim Store`,
-    description: "فهرست محصولات خوراکی عمده و پرچون مسلم استور",
-  };
-}
-
-

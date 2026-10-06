@@ -1,9 +1,6 @@
 import Link from "next/link";
-import { asc, desc, eq, sql } from "drizzle-orm";
-import { db } from "@/db";
-import { categories, products, zones } from "@/db/schema";
 import { getSettings } from "@/lib/settings";
-import { CARD_COLUMNS, SLIM_COLUMNS } from "@/lib/queries";
+import { getHomeBundles } from "@/lib/store-data";
 import { num, toFa } from "@/lib/format";
 import { ProductCard } from "@/components/product-card";
 import { HeroSlider } from "@/components/hero-slider";
@@ -43,55 +40,7 @@ const AFGHAN_BRANDS = [
 export default async function HomePage() {
   const s = await getSettings();
   const threshold = Number(s.freeDeliveryThreshold) || 0;
-
-  const [cats, popular, deals, wholesale, newest, zoneRows, totals] = await Promise.all([
-    db
-      .select({
-        id: categories.id,
-        slug: categories.slug,
-        name: categories.name,
-        image: categories.image,
-        count: sql<number>`count(${products.id})::int`,
-      })
-      .from(categories)
-      .leftJoin(products, sql`${products.categoryId} = ${categories.id} and ${products.isActive} = true`)
-      .where(eq(categories.isActive, true))
-      .groupBy(categories.id)
-      .orderBy(asc(categories.sortOrder)),
-    db
-      .select(SLIM_COLUMNS)
-      .from(products)
-      .where(sql`${products.isActive} = true and ${products.isPopular} = true`)
-      .orderBy(desc(CARD_COLUMNS.sold))
-      .limit(14),
-    db
-      .select(SLIM_COLUMNS)
-      .from(products)
-      .where(sql`${products.isActive} = true and ${products.discount} > 0 and ${products.stock} > 0`)
-      .orderBy(desc(products.discount))
-      .limit(12),
-    db
-      .select(SLIM_COLUMNS)
-      .from(products)
-      .where(sql`${products.isActive} = true and ${products.wholesalePrice} is not null`)
-      .orderBy(asc(products.wholesaleMin))
-      .limit(12),
-    db
-      .select(SLIM_COLUMNS)
-      .from(products)
-      .where(sql`${products.isActive} = true`)
-      .orderBy(desc(products.createdAt), desc(products.id))
-      .limit(12),
-    db.select().from(zones).where(eq(zones.isActive, true)).orderBy(asc(zones.id)),
-    db
-      .select({
-        products: sql<number>`(select count(*)::int from products where is_active = true)`,
-        delivered: sql<number>`(select count(*)::int from orders where status = 'delivered')`,
-        soldUnits: sql<number>`(select coalesce(sum(order_items.qty),0)::int from order_items)`,
-      })
-      .from(products)
-      .limit(1),
-  ]);
+  const { cats, popular, deals, wholesale, newest, zoneRows, totals } = await getHomeBundles();
 
   const promo = [
     {

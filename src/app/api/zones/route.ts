@@ -1,16 +1,12 @@
-import { asc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { zones } from "@/db/schema";
 import { getSettings } from "@/lib/settings";
+import { listZones } from "@/lib/store-data";
+import { isDemoMode } from "@/lib/demo";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const [items, s] = await Promise.all([
-    db.select().from(zones).where(eq(zones.isActive, true)).orderBy(asc(zones.id)),
-    getSettings(),
-  ]);
+  const [items, s] = await Promise.all([listZones(), getSettings()]);
   return NextResponse.json({
     items,
     city: s.city,
@@ -23,5 +19,6 @@ export async function GET() {
     },
     bank: { name: s.bankName, account: s.bankAccount, holder: s.bankHolder },
     pickupAddress: s.pickupAddress,
+    demo: isDemoMode(),
   });
 }
