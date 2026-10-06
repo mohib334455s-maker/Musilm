@@ -80,6 +80,11 @@ export type SessionUser = {
 };
 
 export async function getSessionUser(): Promise<SessionUser | null> {
+  // Skip DB while Next collects page data on Vercel build (DATABASE_URL may be unset)
+  if (process.env.NEXT_PHASE === "phase-production-build" || !process.env.DATABASE_URL) {
+    return null;
+  }
+
   const store = await cookies();
   const session = readSessionToken(store.get(SESSION_COOKIE)?.value);
   if (!session) return null;

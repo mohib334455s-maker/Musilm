@@ -24,10 +24,17 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
 };
 
 export async function getSettings(): Promise<Record<string, string>> {
-  const rows = await db.select().from(settings);
-  const merged: Record<string, string> = { ...DEFAULT_SETTINGS };
-  for (const row of rows) merged[row.key] = row.value;
-  return merged;
+  if (process.env.NEXT_PHASE === "phase-production-build" || !process.env.DATABASE_URL) {
+    return { ...DEFAULT_SETTINGS };
+  }
+  try {
+    const rows = await db.select().from(settings);
+    const merged: Record<string, string> = { ...DEFAULT_SETTINGS };
+    for (const row of rows) merged[row.key] = row.value;
+    return merged;
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
 }
 
 export async function setSettings(values: Record<string, string>): Promise<void> {
