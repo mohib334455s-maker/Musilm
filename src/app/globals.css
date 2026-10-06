@@ -1,0 +1,353 @@
+/* Automatic source detection is disabled: the git repository root resolves to the
+   user's home directory, so Tailwind would otherwise walk and scan the entire home
+   drive on every compile (each spawned postcss worker ballooned until the machine
+   ran out of memory). Scoping sources to `src/` keeps the scan cheap. */
+@import "tailwindcss" source(none);
+@source "../**/*.{ts,tsx}";
+
+@theme {
+  --color-brand: #0f5132;
+  --color-brand-dark: #0a3d25;
+  --color-brand-soft: #f7f8f5;
+  --color-ink: #1f2723;
+  --color-muted: #737b76;
+  --color-line: #e6e9e4;
+  --color-accent: #d4a84f;
+  --color-danger: #b3261e;
+
+  --font-sans: "Vazirmatn", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Archivo", "Vazirmatn", ui-sans-serif, sans-serif;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background-color: #fbfcf9;
+    background-image:
+      radial-gradient(ellipse at top, rgba(15, 81, 50, 0.045), transparent 42%),
+      linear-gradient(180deg, #ffffff 0%, #fbfcf9 48%, #f5f7f2 100%);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background: #0f5132;
+    color: #ffffff;
+  }
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #d7dbd5 transparent;
+  }
+}
+
+@utility display-font {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+@utility num {
+  font-variant-numeric: tabular-nums;
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity 0.5s ease,
+    transform 0.5s ease;
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-rise {
+  animation: rise 0.35s ease both;
+}
+
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-9px);
+  }
+}
+.animate-float {
+  animation: floaty 7s ease-in-out infinite;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-toast {
+  animation: toast-in 0.22s ease both;
+}
+
+.no-bar::-webkit-scrollbar {
+  display: none;
+}
+.no-bar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.leaflet-container {
+  font-family: var(--font-sans);
+  z-index: 0;
+}
+
+/* --- marketplace motions --- */
+@keyframes kenburns {
+  from {
+    transform: scale(1.02);
+  }
+  to {
+    transform: scale(1.14);
+  }
+}
+.kenburns {
+  animation: kenburns 9s ease-out forwards;
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.marquee {
+  overflow: hidden;
+}
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 38s linear infinite;
+}
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+
+@keyframes maskUp {
+  from {
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(14px);
+  }
+  to {
+    clip-path: inset(0 0 -10% 0);
+    transform: none;
+  }
+}
+.mask-up {
+  animation: maskUp 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes pulseDot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(212, 168, 79, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(212, 168, 79, 0);
+  }
+}
+.pulse-dot {
+  animation: pulseDot 2.2s ease-out infinite;
+}
+
+.carousel {
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+.carousel > * {
+  scroll-snap-align: start;
+}
+
+.card-lift {
+  transition:
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.22s ease,
+    border-color 0.22s ease;
+}
+.card-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 30px rgba(15, 81, 50, 0.1);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- craft layer --- */
+:focus-visible {
+  outline: 2px solid #0f5132;
+  outline-offset: 2px;
+}
+
+.dotted {
+  background-image: radial-gradient(rgba(15, 81, 50, 0.09) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+.dotted-dark {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.09) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+.shimmer {
+  background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2.4s linear infinite;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-slide-down {
+  animation: slideDown 0.22s ease both;
+}
+
+@keyframes glowLine {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+.glow-line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(212, 168, 79, 0.45), transparent);
+  animation: glowLine 3.4s ease-in-out infinite;
+}
+
+.btn-shine {
+  position: relative;
+  overflow: hidden;
+}
+.btn-shine::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  right: -50%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+  transform: skewX(-18deg);
+  transition: right 0.55s ease;
+}
+.btn-shine:hover::before {
+  right: 115%;
+}
+
+.admin-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.admin-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 99px;
+}
+.admin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* --- print (invoice) --- */
+@media print {
+  body {
+    background: #fff !important;
+  }
+  header,
+  footer,
+  .no-print {
+    display: none !important;
+  }
+  .print-area {
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kenburns,
+  .marquee-track,
+  .mask-up,
+  .pulse-dot,
+  .shimmer,
+  .animate-slide-down,
+  .glow-line::after,
+  .animate-float,
+  .animate-rise,
+  .animate-toast,
+  .carousel {
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+  .btn-shine::before {
+    display: none;
+  }
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .card-lift {
+    transition: none !important;
+  }
+  .card-lift:hover {
+    transform: none;
+    box-shadow: none;
+  }
+}

@@ -1,0 +1,11 @@
+node_modules
+.next
+.env
+.env.local
+.pgdata
+.freebuff
+*.log
+.DS_Store
+*.tsbuildinfo
+public/brand/logo-source.png
+public/brand/logo-source.png
